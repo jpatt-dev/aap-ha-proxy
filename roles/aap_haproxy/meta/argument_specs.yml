@@ -1,0 +1,200 @@
+---
+argument_specs:
+  main:
+    short_description: Configure HAProxy and Keepalived in front of AAP 2.6 platform gateway
+    description:
+      - Deploys HAProxy and Keepalived on RHEL hosts in the selected AAP inventory.
+      - Variables can be set via AAP Job Template surveys, extra vars, inventory group_vars, or role defaults.
+    author: aap-ha-proxy
+    options:
+      aap_haproxy_project_root:
+        type: str
+        default: "{{ playbook_dir | dirname }}"
+        description: Automation project root (parent of playbooks/). Override rarely.
+
+      aap_gateway_fqdn:
+        type: str
+        default: aap.example.com
+        description: External AAP access name (alias). FQDN in production; VIP IP OK in lab.
+
+      aap_gateway_external_host:
+        type: str
+        default: ""
+        description: Hostname or IP for Host header, health checks, and SNI. Defaults to aap_gateway_fqdn.
+
+      aap_gateway_vip:
+        type: str
+        default: 10.0.0.100/24
+        description: Keepalived VIP with CIDR prefix.
+
+      aap_gateway_vip_interface:
+        type: str
+        default: ens192
+        description: NIC for VIP. Verify with ip route | grep default on each HAProxy node.
+
+      aap_gateway_backends:
+        type: list
+        elements: raw
+        default: []
+        description: >-
+          Explicit gateway backends (highest priority). If empty, the role parses
+          aap_gateway_backend_hosts_csv from the AAP survey. Playbook targets hosts all.
+
+      aap_gateway_backend_hosts_csv:
+        type: str
+        default: ""
+        description: >-
+          Comma-separated AAP gateway/backend IPs or hostnames (AAP survey). Parsed when
+          aap_gateway_backends is empty. Ignored when aap_gateway_backends is non-empty.
+
+      haproxy_listen_port:
+        type: int
+        default: 443
+        description: HAProxy frontend HTTPS port.
+
+      haproxy_backend_port:
+        type: int
+        default: 443
+        description: AAP gateway backend port.
+
+      haproxy_healthcheck_path:
+        type: str
+        default: /api/gateway/v1/ping/
+        description: HTTP health check path.
+
+      haproxy_healthcheck_expect_status:
+        type: int
+        default: 200
+        description: Expected HTTP status from health check.
+
+      haproxy_backend_verify_host:
+        type: str
+        default: ""
+        description: TLS verifyhost for backends; defaults to aap_gateway_fqdn when empty.
+
+      haproxy_manage_tls_files:
+        type: bool
+        default: false
+        description: >-
+          When true, deploy PEM from haproxy_ssl_cert_src and haproxy_ssl_key_src on the execution node.
+          When false, use existing haproxy_ssl_pem_path on each HAProxy node.
+
+      haproxy_ssl_pem_path:
+        type: path
+        default: /etc/haproxy/certs/aap-gateway.pem
+        description: Combined PEM path on HAProxy nodes (deployed or pre-existing).
+
+      haproxy_ssl_cert_src:
+        type: path
+        default: ""
+        description: Full-chain certificate path on execution node when haproxy_manage_tls_files is true.
+
+      haproxy_ssl_key_src:
+        type: path
+        default: ""
+        description: Private key path on execution node when haproxy_manage_tls_files is true.
+
+      haproxy_verify_backend_cert:
+        type: bool
+        default: false
+        description: Verify gateway backend TLS certificates.
+
+      haproxy_backend_ca_src:
+        type: path
+        default: ""
+        description: Internal CA cert path when haproxy_verify_backend_cert is true.
+
+      haproxy_backend_ca_file:
+        type: path
+        default: /etc/haproxy/certs/aap-backend-ca.pem
+        description: Destination path for backend CA on HAProxy nodes.
+
+      keepalived_auth_pass:
+        type: str
+        required: true
+        no_log: true
+        description: VRRP password (max 8 characters). Use AAP survey password or vault.
+
+      keepalived_vrrp_id:
+        type: int
+        default: 51
+        description: VRRP virtual router ID (unique per cluster).
+
+      keepalived_state:
+        type: str
+        default: BACKUP
+        choices:
+          - MASTER
+          - BACKUP
+        description: Keepalived initial state. Prefer BACKUP on both nodes with different priority.
+
+      keepalived_priority:
+        type: int
+        default: 100
+        description: VRRP priority (set per host in inventory host_vars).
+
+      keepalived_peer_ips:
+        type: list
+        elements: str
+        default: []
+        description: HAProxy peer IPs allowed to send VRRP when firewalld is enabled.
+
+      keepalived_peer_ips_csv:
+        type: str
+        default: ""
+        description: Comma-separated keepalived_peer_ips for AAP surveys.
+
+      keepalived_unicast:
+        type: bool
+        default: true
+        description: Enable unicast VRRP (recommended on VMware when multicast is unreliable).
+
+      keepalived_unicast_src_ip:
+        type: str
+        default: ""
+        description: This node's IP for unicast VRRP. Set in inventory host_vars only, not Job Template survey.
+
+      keepalived_unicast_peers:
+        type: list
+        elements: str
+        default: []
+        description: Peer node IPs for unicast VRRP. Set in inventory host_vars only, not Job Template survey.
+
+      keepalived_unicast_peers_csv:
+        type: str
+        default: ""
+        description: Optional CSV override for host_vars; not used in Job Template survey.
+
+      keepalived_nopreempt:
+        type: bool
+        default: true
+        description: Do not preempt VIP when higher-priority node recovers.
+
+      keepalived_notify_scripts:
+        type: bool
+        default: false
+        description: Deploy Keepalived hooks that reload HAProxy on state change.
+
+      configure_firewalld:
+        type: bool
+        default: true
+        description: Install firewalld and open HTTPS plus peer-restricted VRRP.
+
+      haproxy_firewalld_zone:
+        type: str
+        default: public
+        description: firewalld zone for HAProxy rules.
+
+      haproxy_manage_selinux:
+        type: bool
+        default: false
+        description: >-
+          Set SELinux fcontext on haproxy_ssl_cert_dest_dir and restorecon. Requires
+          community.general when true and SELinux is enforcing. Lab default is false.
+
+      haproxy_selinux_cert_context:
+        type: str
+        default: cert_t
+        description: >-
+          SELinux file type for certificate paths (RHEL: use cert_t, not haproxy_etc_t).
+          Verify with semanage fcontext -l on target hosts.

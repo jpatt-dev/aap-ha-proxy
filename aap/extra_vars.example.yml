@@ -1,0 +1,21 @@
+---
+# Working AAP lab extra vars — Job Template extra variables or survey answers.
+
+keepalived_auth_pass: labpass1
+
+haproxy_manage_tls_files: false
+haproxy_manage_selinux: false
+haproxy_ssl_pem_path: /etc/haproxy/certs/aap-gateway.pem
+haproxy_verify_backend_cert: false
+
+aap_gateway_external_host: 192.168.4.50
+aap_gateway_fqdn: 192.168.4.50
+aap_gateway_vip: 192.168.4.50/24
+aap_gateway_vip_interface: ens18
+aap_gateway_backend_hosts_csv: "192.168.4.60"
+
+keepalived_peer_ips_csv: "192.168.4.51,192.168.4.52"
+keepalived_unicast: true
+keepalived_nopreempt: true
+configure_firewalld: true
+keepalived_notify_scripts: false

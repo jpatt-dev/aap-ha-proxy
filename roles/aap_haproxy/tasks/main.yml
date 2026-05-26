@@ -1,0 +1,286 @@
+---
+- name: Parse survey and extra var inputs
+  ansible.builtin.include_tasks: parse_survey_inputs.yml
+
+- name: Validate AAP gateway backends are defined
+  ansible.builtin.assert:
+    that:
+      - aap_gateway_backends | default([]) | length > 0
+    fail_msg: |-
+      No AAP gateway backends were found.
+      For AAP Job Template usage, provide one of:
+
+      aap_gateway_backend_hosts_csv: "192.168.4.60"
+
+      or:
+
+      aap_gateway_backends:
+        - name: gw1
+          host: 192.168.4.60
+          port: 443
+
+      The AAP backend/controller host should not be included in the HAProxy inventory when this play targets all hosts.
+
+- name: Reset normalized backends
+  ansible.builtin.set_fact:
+    aap_gateway_backends_normalized: []
+  changed_when: false
+
+- name: Build normalized backend entry
+  ansible.builtin.set_fact:
+    aap_gateway_backends_normalized: "{{ aap_gateway_backends_normalized + [ backend_entry ] }}"
+  vars:
+    backend_entry:
+      name: "{{ _name | trim | regex_replace('[^a-zA-Z0-9_-]', '_') }}"
+      host: "{{ _host | trim }}"
+      port: "{{ _port | int }}"
+    _name: >-
+      {%- if item is mapping and item.name is defined and (item.name | string | trim | length > 0) -%}
+      {{ item.name }}
+      {%- elif item is mapping -%}
+      gw{{ backend_idx + 1 }}
+      {%- else -%}
+      gw{{ backend_idx + 1 }}
+      {%- endif -%}
+    _host: >-
+      {%- if item is mapping -%}
+      {%- if item.host is defined and (item.host | string | trim | length > 0) -%}
+      {{ item.host }}
+      {%- elif item.inventory_hostname is defined and (item.inventory_hostname | string | trim | length > 0) -%}
+      {{ hostvars.get(item.inventory_hostname, {}).get('ansible_host', item.inventory_hostname) }}
+      {%- endif -%}
+      {%- else -%}
+      {{ hostvars.get(item, {}).get('ansible_host', item) }}
+      {%- endif -%}
+    _port: "{{ item.port | default(haproxy_backend_port) if item is mapping else haproxy_backend_port }}"
+  loop: "{{ aap_gateway_backends }}"
+  loop_control:
+    index_var: backend_idx
+  changed_when: false
+
+- name: Apply normalized backends
+  ansible.builtin.set_fact:
+    aap_gateway_backends: "{{ aap_gateway_backends_normalized }}"
+  changed_when: false
+
+- name: Validate backend TLS verification settings
+  ansible.builtin.assert:
+    that:
+      - not haproxy_verify_backend_cert | bool or (
+          haproxy_backend_ca_src | default('') | trim | length > 0 and
+          haproxy_backend_ca_file | default('') | trim | length > 0
+        )
+    fail_msg: |-
+      haproxy_verify_backend_cert is true but haproxy_backend_ca_src is missing.
+      Provide a CA certificate path on the execution node (project file), for example:
+
+      haproxy_backend_ca_src: /runner/project/files/aap-backend-ca.crt
+      haproxy_backend_ca_file: /etc/haproxy/certs/aap-backend-ca.pem
+
+      Or set haproxy_verify_backend_cert: false for lab.
+
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - aap_gateway_vip is defined
+      - aap_gateway_vip | length > 0
+      - >-
+        (aap_gateway_external_host | default('') | trim | length > 0) or
+        (aap_gateway_fqdn | default('') | trim | length > 0)
+      - aap_gateway_external_host | default('') | trim | length > 0
+      - aap_gateway_vip_interface is defined
+      - aap_gateway_vip_interface | length > 0
+      - not haproxy_manage_tls_files | bool or (
+          haproxy_ssl_cert_src is defined and
+          haproxy_ssl_cert_src | default('') | trim | length > 0 and
+          haproxy_ssl_key_src is defined and
+          haproxy_ssl_key_src | default('') | trim | length > 0
+        )
+      - haproxy_manage_tls_files | bool or (
+          haproxy_ssl_pem_path is defined and
+          haproxy_ssl_pem_path | default('') | trim | length > 0
+        )
+      - keepalived_auth_pass is defined
+      - keepalived_auth_pass | length > 0
+      - keepalived_auth_pass | length <= 8
+      - keepalived_auth_pass | lower not in (keepalived_auth_pass_rejected | map('lower') | list)
+      - not configure_firewalld | bool or keepalived_peer_ips | length >= 2
+      - not keepalived_unicast | bool or (
+          keepalived_unicast_src_ip | length > 0 and
+          keepalived_unicast_peers | length > 0
+        )
+      - aap_gateway_backends | map(attribute='host') | map('trim') | select('equalto', '') | list | length == 0
+      - aap_gateway_backends | map(attribute='name') | list | length == (aap_gateway_backends | map(attribute='name') | unique | list | length)
+    fail_msg: >-
+      Check AAP Job Template survey / aap/extra_vars.example.yml:
+      VIP, external access host (aap_gateway_external_host or aap_gateway_fqdn), backend host/name validity,
+      TLS (haproxy_ssl_cert_src and haproxy_ssl_key_src when haproxy_manage_tls_files is true,
+      or haproxy_ssl_pem_path when false), keepalived_auth_pass (max 8 chars),
+      and keepalived_peer_ips (>= 2 when configure_firewalld is true).
+
+- name: Validate VIP interface exists
+  ansible.builtin.assert:
+    that:
+      - aap_gateway_vip_interface in ansible_facts.interfaces
+    fail_msg: >-
+      The configured VIP interface '{{ aap_gateway_vip_interface }}' does not exist.
+      Run 'ip -br addr show' or 'ip route | grep default' and set
+      aap_gateway_vip_interface to the actual interface name.
+
+- name: Install HAProxy and Keepalived packages
+  ansible.builtin.dnf:
+    name: "{{ haproxy_packages }}"
+    state: present
+
+- name: Ensure HAProxy certificate directory exists
+  ansible.builtin.file:
+    path: "{{ haproxy_ssl_cert_dest_dir }}"
+    state: directory
+    owner: root
+    group: haproxy
+    mode: "0750"
+
+- name: Deploy HAProxy TLS PEM bundle
+  ansible.builtin.copy:
+    content: "{{ lookup('ansible.builtin.file', haproxy_ssl_cert_src) }}\n{{ lookup('ansible.builtin.file', haproxy_ssl_key_src) }}\n"
+    dest: "{{ haproxy_ssl_pem_path }}"
+    owner: root
+    group: haproxy
+    mode: "0640"
+  when: haproxy_manage_tls_files | bool
+  no_log: true
+  diff: false
+  notify: Reload haproxy
+
+- name: Check existing HAProxy PEM when TLS file management is disabled
+  ansible.builtin.stat:
+    path: "{{ haproxy_ssl_pem_path }}"
+  register: haproxy_existing_pem
+  when: not haproxy_manage_tls_files | bool
+
+- name: Validate existing HAProxy PEM exists
+  ansible.builtin.assert:
+    that:
+      - haproxy_existing_pem.stat.exists
+      - haproxy_existing_pem.stat.isreg
+    fail_msg: >-
+      haproxy_manage_tls_files is false, but {{ haproxy_ssl_pem_path }} does not exist
+      or is not a regular file on this HAProxy node.
+  when: not haproxy_manage_tls_files | bool
+
+- name: Warn when existing HAProxy PEM permissions differ from recommended
+  ansible.builtin.debug:
+    msg: >-
+      {{ haproxy_ssl_pem_path }} is {{ haproxy_existing_pem.stat.pw_name }}:{{ haproxy_existing_pem.stat.gr_name }}
+      mode {{ haproxy_existing_pem.stat.mode }}; enforcing root:haproxy 0640.
+  when:
+    - not haproxy_manage_tls_files | bool
+    - haproxy_existing_pem.stat.exists
+    - >-
+      haproxy_existing_pem.stat.pw_name != 'root' or
+      haproxy_existing_pem.stat.gr_name != 'haproxy' or
+      haproxy_existing_pem.stat.mode != '0640'
+
+- name: Ensure existing HAProxy PEM permissions are correct
+  ansible.builtin.file:
+    path: "{{ haproxy_ssl_pem_path }}"
+    owner: root
+    group: haproxy
+    mode: "0640"
+  when: not haproxy_manage_tls_files | bool
+  notify: Reload haproxy
+
+- name: Deploy backend CA certificate
+  ansible.builtin.copy:
+    src: "{{ haproxy_backend_ca_src }}"
+    dest: "{{ haproxy_backend_ca_file }}"
+    owner: root
+    group: haproxy
+    mode: "0640"
+  when:
+    - haproxy_verify_backend_cert | bool
+    - haproxy_backend_ca_src | default('') | length > 0
+    - haproxy_backend_ca_file | length > 0
+  notify: Reload haproxy
+
+- name: Deploy Keepalived notify script
+  ansible.builtin.template:
+    src: aap-haproxy-notify.sh.j2
+    dest: /usr/local/bin/aap-haproxy-notify.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: keepalived_notify_scripts | bool
+
+- name: Deploy HAProxy configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    validate: haproxy -c -f %s
+  notify: Reload haproxy
+
+- name: Include SELinux management tasks
+  ansible.builtin.include_tasks: selinux.yml
+  when:
+    - haproxy_manage_selinux | bool
+    - ansible_facts.selinux is defined
+    - ansible_facts.selinux.status == "enabled"
+
+- name: Deploy Keepalived configuration
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart keepalived
+
+- name: Install firewalld package
+  ansible.builtin.dnf:
+    name: firewalld
+    state: present
+  when: configure_firewalld | bool
+
+- name: Enable and start firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    enabled: true
+    state: started
+  when: configure_firewalld | bool
+
+- name: Allow HTTPS through firewalld
+  ansible.posix.firewalld:
+    service: https
+    zone: "{{ haproxy_firewalld_zone }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  when: configure_firewalld | bool
+
+- name: Allow VRRP from Keepalived peers through firewalld
+  ansible.posix.firewalld:
+    rich_rule: 'rule family="ipv4" source address="{{ item }}" protocol value="vrrp" accept'
+    zone: "{{ haproxy_firewalld_zone }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ keepalived_peer_ips | sort }}"
+  when:
+    - configure_firewalld | bool
+    - keepalived_peer_ips | length > 0
+
+- name: Enable and start HAProxy
+  ansible.builtin.systemd:
+    name: haproxy
+    enabled: true
+    state: started
+
+- name: Enable and start Keepalived
+  ansible.builtin.systemd:
+    name: keepalived
+    enabled: true
+    state: started

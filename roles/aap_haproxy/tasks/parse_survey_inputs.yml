@@ -1,0 +1,110 @@
+---
+# Normalize Job Template survey / extra var inputs (strings, CSV lists, boolean strings).
+
+- name: Normalize boolean extra vars from surveys
+  ansible.builtin.set_fact:
+    configure_firewalld: "{{ configure_firewalld | bool }}"
+    keepalived_unicast: "{{ keepalived_unicast | bool }}"
+    keepalived_nopreempt: "{{ keepalived_nopreempt | bool }}"
+    keepalived_notify_scripts: "{{ keepalived_notify_scripts | bool }}"
+    haproxy_verify_backend_cert: "{{ haproxy_verify_backend_cert | bool }}"
+    haproxy_manage_selinux: "{{ haproxy_manage_selinux | bool }}"
+    haproxy_manage_tls_files: "{{ haproxy_manage_tls_files | bool }}"
+  changed_when: false
+
+- name: Resolve external AAP access host from fqdn when not set explicitly
+  ansible.builtin.set_fact:
+    aap_gateway_external_host: "{{ aap_gateway_fqdn }}"
+  when: aap_gateway_external_host | default('') | trim | length == 0
+  changed_when: false
+
+- name: Reset blank TLS certificate path to role default
+  ansible.builtin.set_fact:
+    haproxy_ssl_cert_src: "{{ aap_haproxy_project_root }}/files/aap-gateway.crt"
+  when:
+    - haproxy_manage_tls_files | bool
+    - haproxy_ssl_cert_src | default('') | trim | length == 0
+  changed_when: false
+
+- name: Reset blank TLS private key path to role default
+  ansible.builtin.set_fact:
+    haproxy_ssl_key_src: "{{ aap_haproxy_project_root }}/files/aap-gateway.key"
+  when:
+    - haproxy_manage_tls_files | bool
+    - haproxy_ssl_key_src | default('') | trim | length == 0
+  changed_when: false
+
+- name: Parse keepalived_peer_ips from comma-separated survey input
+  ansible.builtin.set_fact:
+    keepalived_peer_ips: "{{ _peer_ips }}"
+  vars:
+    _peer_ips: >-
+      {{
+        (keepalived_peer_ips_csv | default('') | trim).split(',')
+        | map('trim')
+        | reject('equalto', '')
+        | list
+      }}
+  when: keepalived_peer_ips_csv | default('') | trim | length > 0
+  changed_when: false
+
+- name: Parse keepalived_peer_ips when provided as a string
+  ansible.builtin.set_fact:
+    keepalived_peer_ips: "{{ keepalived_peer_ips.split(',') | map('trim') | reject('equalto', '') | list }}"
+  when:
+    - keepalived_peer_ips is string
+    - keepalived_peer_ips | trim | length > 0
+  changed_when: false
+
+- name: Parse keepalived_unicast_peers from comma-separated survey input
+  ansible.builtin.set_fact:
+    keepalived_unicast_peers: "{{ _unicast_peers }}"
+  vars:
+    _unicast_peers: >-
+      {{
+        (keepalived_unicast_peers_csv | default('') | trim).split(',')
+        | map('trim')
+        | reject('equalto', '')
+        | list
+      }}
+  when: keepalived_unicast_peers_csv | default('') | trim | length > 0
+  changed_when: false
+
+- name: Parse keepalived_unicast_peers when provided as a string
+  ansible.builtin.set_fact:
+    keepalived_unicast_peers: "{{ keepalived_unicast_peers.split(',') | map('trim') | reject('equalto', '') | list }}"
+  when:
+    - keepalived_unicast_peers is string
+    - keepalived_unicast_peers | trim | length > 0
+  changed_when: false
+
+- name: Parse aap_gateway_backend_hosts_csv into aap_gateway_backends
+  when:
+    - aap_gateway_backends | default([]) | length == 0
+    - aap_gateway_backend_hosts_csv | default('') | trim | length > 0
+  vars:
+    _csv_hosts: >-
+      {{
+        (aap_gateway_backend_hosts_csv | default('') | trim).split(',')
+        | map('trim')
+        | reject('equalto', '')
+        | list
+      }}
+  block:
+    - name: Reset backends list before CSV parsing
+      ansible.builtin.set_fact:
+        aap_gateway_backends: []
+      changed_when: false
+
+    - name: Append backend entry from CSV host
+      ansible.builtin.set_fact:
+        aap_gateway_backends: "{{ aap_gateway_backends + [ backend_entry ] }}"
+      vars:
+        backend_entry:
+          name: "gw{{ backend_idx + 1 }}"
+          host: "{{ item }}"
+          port: "{{ haproxy_backend_port | default(443) | int }}"
+      loop: "{{ _csv_hosts }}"
+      loop_control:
+        index_var: backend_idx
+      changed_when: false

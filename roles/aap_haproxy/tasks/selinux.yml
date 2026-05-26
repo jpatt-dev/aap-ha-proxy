@@ -1,0 +1,32 @@
+---
+- name: Apply SELinux configuration for HAProxy
+  block:
+    - name: Install policycoreutils-python-utils for SELinux management
+      ansible.builtin.dnf:
+        name: policycoreutils-python-utils
+        state: present
+
+    - name: Set SELinux context for HAProxy certificate directory
+      community.general.sefcontext:
+        target: "{{ haproxy_ssl_cert_dest_dir }}(/.*)?"
+        setype: "{{ haproxy_selinux_cert_context }}"
+        state: present
+
+    - name: Restore SELinux context on HAProxy certificate directory
+      ansible.builtin.command:
+        cmd: restorecon -Rv {{ haproxy_ssl_cert_dest_dir }}
+      changed_when: false
+
+    - name: Restore SELinux context on HAProxy configuration
+      ansible.builtin.command:
+        cmd: restorecon -Rv /etc/haproxy
+      changed_when: false
+  rescue:
+    - name: SELinux context setup failed
+      ansible.builtin.fail:
+        msg: >-
+          Could not set SELinux context {{ haproxy_selinux_cert_context }} on
+          {{ haproxy_ssl_cert_dest_dir }}. On RHEL use a file type such as cert_t
+          (see semanage fcontext -l | grep cert_t). haproxy_etc_t is not valid for
+          file labeling. Set haproxy_manage_selinux: false for lab, or set
+          haproxy_selinux_cert_context: cert_t.

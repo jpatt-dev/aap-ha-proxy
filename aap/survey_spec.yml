@@ -1,0 +1,116 @@
+---
+# Reference survey definitions for AAP 2.6 Job Template UI.
+# Global extra vars only — per-node Keepalived settings belong in AAP host vars.
+
+surveys:
+  - variable: keepalived_auth_pass
+    type: password
+    label: Keepalived VRRP password
+    required: true
+    help_text: Max 8 characters. Use vault in production.
+
+  - variable: haproxy_manage_tls_files
+    type: multiplechoice
+    label: Deploy TLS PEM from project?
+    required: true
+    default: "false"
+    choices:
+      - "true"
+      - "false"
+    help_text: false = use existing PEM on each HAProxy node (typical lab).
+
+  - variable: haproxy_manage_selinux
+    type: multiplechoice
+    label: Manage SELinux cert context
+    required: true
+    default: "false"
+    choices:
+      - "true"
+      - "false"
+    help_text: false = skip SELinux tasks (typical lab).
+
+  - variable: haproxy_ssl_pem_path
+    type: text
+    label: HAProxy PEM path on nodes
+    required: false
+    default: /etc/haproxy/certs/aap-gateway.pem
+    help_text: Used when haproxy_manage_tls_files is false.
+
+  - variable: haproxy_verify_backend_cert
+    type: multiplechoice
+    label: Verify backend TLS certificates
+    required: true
+    default: "false"
+    choices:
+      - "true"
+      - "false"
+    help_text: When true, provide haproxy_backend_ca_src via extra vars.
+
+  - variable: aap_gateway_external_host
+    type: text
+    label: External access name (FQDN or VIP IP)
+    required: false
+    default: "192.168.4.50"
+    help_text: Host/SNI/health-check name. Blank uses aap_gateway_fqdn.
+
+  - variable: aap_gateway_fqdn
+    type: text
+    label: Platform FQDN
+    required: true
+    default: "192.168.4.50"
+    help_text: Must match certificate SAN and gateway_main_url.
+
+  - variable: aap_gateway_vip
+    type: text
+    label: Keepalived VIP (with CIDR)
+    required: true
+    default: "192.168.4.50/24"
+
+  - variable: aap_gateway_vip_interface
+    type: text
+    label: VIP network interface
+    required: true
+    default: ens18
+    help_text: Verify with ip route | grep default on HAProxy nodes.
+
+  - variable: aap_gateway_backend_hosts_csv
+    type: text
+    label: AAP gateway backend hosts (CSV)
+    required: false
+    default: "192.168.4.60"
+    help_text: Comma-separated backend IPs. Do not add backend to HAProxy inventory.
+
+  - variable: keepalived_peer_ips_csv
+    type: text
+    label: HAProxy peer IPs (CSV)
+    required: true
+    default: "192.168.4.51,192.168.4.52"
+    help_text: Both HAProxy node IPs for VRRP firewall rules.
+
+  - variable: keepalived_unicast
+    type: multiplechoice
+    label: Use unicast VRRP
+    required: true
+    default: "true"
+    choices:
+      - "true"
+      - "false"
+    help_text: Set unicast src/peers in AAP host vars per node.
+
+  - variable: keepalived_nopreempt
+    type: multiplechoice
+    label: Keepalived nopreempt
+    required: true
+    default: "true"
+    choices:
+      - "true"
+      - "false"
+
+  - variable: configure_firewalld
+    type: multiplechoice
+    label: Configure firewalld
+    required: true
+    default: "true"
+    choices:
+      - "true"
+      - "false"

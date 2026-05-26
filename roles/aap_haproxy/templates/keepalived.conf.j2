@@ -1,0 +1,49 @@
+# Ansible managed
+
+global_defs {
+    router_id {{ ansible_hostname | regex_replace('[^a-zA-Z0-9]', '') }}
+    script_user root
+    enable_script_security
+}
+
+vrrp_script chk_haproxy {
+    script "/usr/bin/systemctl is-active --quiet haproxy"
+    interval 2
+    weight -20
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_AAP_GATEWAY {
+    state {{ keepalived_state }}
+    interface {{ aap_gateway_vip_interface }}
+    virtual_router_id {{ keepalived_vrrp_id }}
+    priority {{ keepalived_priority }}
+    advert_int 1
+{% if keepalived_nopreempt %}
+    nopreempt
+{% endif %}
+    authentication {
+        auth_type PASS
+        auth_pass {{ keepalived_auth_pass }}
+    }
+{% if keepalived_unicast %}
+    unicast_src_ip {{ keepalived_unicast_src_ip }}
+    unicast_peer {
+{% for peer in keepalived_unicast_peers %}
+        {{ peer }}
+{% endfor %}
+    }
+{% endif %}
+    virtual_ipaddress {
+        {{ aap_gateway_vip }}
+    }
+    track_script {
+        chk_haproxy
+    }
+{% if keepalived_notify_scripts %}
+    notify_master "/usr/local/bin/aap-haproxy-notify.sh master"
+    notify_backup "/usr/local/bin/aap-haproxy-notify.sh backup"
+    notify_fault "/usr/local/bin/aap-haproxy-notify.sh fault"
+{% endif %}
+}

@@ -1,0 +1,13 @@
+---
+# AAP 2.6 Job Template entry point.
+# Survey / job template extra vars override role defaults (see aap/survey_spec.yml).
+#
+# AAP-first mode:
+# The selected AAP inventory should contain only the HAProxy/Keepalived nodes.
+# Do not include the AAP backend/controller host in this inventory.
+- name: Configure HAProxy and Keepalived for AAP 2.6 gateway
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: aap_haproxy

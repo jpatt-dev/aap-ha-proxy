@@ -1,0 +1,12 @@
+---
+# AAP 2.6 custom execution environment definition.
+# Build from a pinned supported EE base; install collections from collections/requirements.yml.
+
+version: 3
+
+dependencies:
+  galaxy: collections/requirements.yml
+
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-26/ee-supported-rhel9:latest

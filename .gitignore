@@ -1,0 +1,13 @@
+*.key
+*.pem
+*.crt
+*.csr
+*.p12
+*.pfx
+*.retry
+.vault_pass
+.env
+__pycache__/
+.pytest_cache/
+.ansible/
+.DS_Store

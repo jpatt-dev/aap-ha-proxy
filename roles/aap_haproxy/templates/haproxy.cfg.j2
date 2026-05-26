@@ -1,0 +1,50 @@
+# Ansible managed
+
+global
+    log         /dev/log local0
+    chroot      /var/lib/haproxy
+    maxconn     4000
+    user        haproxy
+    group       haproxy
+    daemon
+
+    ssl-default-bind-ciphers PROFILE=SYSTEM
+    ssl-default-bind-options no-sslv3 no-tlsv10 no-tlsv11 no-tls-tickets
+
+defaults
+    log                     global
+    mode                    http
+    option                  httplog
+    option                  dontlognull
+    option                  http-server-close
+    option                  forwardfor except 127.0.0.0/8
+    option                  redispatch
+    retries                 3
+    timeout http-request    10s
+    timeout queue           1m
+    timeout connect         10s
+    timeout client          5m
+    timeout server          5m
+    timeout http-keep-alive 30s
+    timeout tunnel          1h
+    timeout check           10s
+    maxconn                 3000
+
+frontend aap_gateway_https
+    bind *:{{ haproxy_listen_port }} ssl crt {{ haproxy_ssl_pem_path }}
+    mode http
+    http-request set-header X-Forwarded-Proto https
+    http-request set-header X-Forwarded-Port {{ haproxy_listen_port }}
+    http-request set-header X-Forwarded-Host %[req.hdr(Host)]
+    default_backend aap_gateway
+
+backend aap_gateway
+    mode http
+    balance roundrobin
+    option httpchk
+    http-check send meth GET uri {{ haproxy_healthcheck_path }} ver HTTP/1.1 hdr Host {{ aap_gateway_external_host }}
+    http-check expect status {{ haproxy_healthcheck_expect_status }}
+{% for backend in aap_gateway_backends %}
+    server {{ backend.name }} {{ backend.host }}:{{ backend.port | default(haproxy_backend_port | default(443)) }} check ssl alpn http/1.1 sni str({{ aap_gateway_external_host }}) check-sni {{ aap_gateway_external_host }}{% if haproxy_verify_backend_cert | bool %} verify required ca-file {{ haproxy_backend_ca_file }} verifyhost {{ haproxy_backend_verify_host | default(aap_gateway_external_host, true) }}{% else %} verify none{% endif %}
+
+{% endfor %}

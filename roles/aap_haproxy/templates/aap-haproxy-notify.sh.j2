@@ -1,0 +1,8 @@
+#!/bin/bash
+# Ansible managed
+case "$1" in
+    master|backup|fault)
+        systemctl reload haproxy 2>/dev/null || systemctl restart haproxy
+        ;;
+esac
+exit 0
