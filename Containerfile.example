@@ -1,5 +1,4 @@
-# Lab/reference only — manual podman build for AAP 2.6.
-# Production: use a pinned supported AAP 2.6 EE base image, not floating latest.
+# Optional manual EE build for AAP 2.6. Production: use a pinned supported base image.
 #
 #   podman build -f Containerfile.example -t aap-ha-proxy-ee:lab .
 #   podman push <registry>/aap-ha-proxy-ee:lab

@@ -26,7 +26,5 @@
       ansible.builtin.fail:
         msg: >-
           Could not set SELinux context {{ haproxy_selinux_cert_context }} on
-          {{ haproxy_ssl_cert_dest_dir }}. On RHEL use a file type such as cert_t
-          (see semanage fcontext -l | grep cert_t). haproxy_etc_t is not valid for
-          file labeling. Set haproxy_manage_selinux: false for lab, or set
-          haproxy_selinux_cert_context: cert_t.
+          {{ haproxy_ssl_cert_dest_dir }}. Use cert_t on RHEL, or set
+          haproxy_manage_selinux: false.

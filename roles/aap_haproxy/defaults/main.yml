@@ -1,26 +1,19 @@
 ---
-# Project root when playbook is playbooks/site.yml (AAP automation project sync root).
 aap_haproxy_project_root: "{{ playbook_dir | dirname }}"
 
-# External name for Host header, health checks, and SNI (FQDN or VIP IP). aap_gateway_fqdn is an alias.
-# Lab: VIP IP (e.g. 192.168.4.50). Production: DNS/FQDN (e.g. aap.company.example.com).
 aap_gateway_fqdn: aap.example.com
 aap_gateway_external_host: "{{ aap_gateway_fqdn }}"
 aap_gateway_vip: 10.0.0.100/24
-# Verify with: ip route | grep default
 aap_gateway_vip_interface: ens192
 aap_gateway_backends: []
-# AAP survey: comma-separated gateway/backend IPs (parsed when aap_gateway_backends is empty)
 aap_gateway_backend_hosts_csv: ""
 
-# HAProxy frontend/backend
 haproxy_listen_port: 443
 haproxy_backend_port: 443
 haproxy_healthcheck_path: /api/gateway/v1/ping/
 haproxy_healthcheck_expect_status: 200
 haproxy_backend_verify_host: ""
 
-# TLS (paths on execution node / project checkout; override via AAP survey)
 haproxy_ssl_cert_dest_dir: /etc/haproxy/certs
 haproxy_ssl_pem_path: /etc/haproxy/certs/aap-gateway.pem
 haproxy_manage_tls_files: false
@@ -30,7 +23,6 @@ haproxy_verify_backend_cert: false
 haproxy_backend_ca_file: /etc/haproxy/certs/aap-backend-ca.pem
 haproxy_backend_ca_src: ""
 
-# Keepalived (set keepalived_auth_pass via survey, vault, or extra vars)
 keepalived_auth_pass: ""
 keepalived_auth_pass_rejected:
   - change-me
@@ -47,16 +39,13 @@ keepalived_unicast_src_ip: ""
 keepalived_unicast_peers: []
 keepalived_nopreempt: true
 
-# Survey-friendly comma-separated lists (parsed in parse_survey_inputs.yml)
 keepalived_peer_ips: []
 keepalived_peer_ips_csv: ""
 keepalived_unicast_peers_csv: ""
 
-# Firewalld
 configure_firewalld: true
 haproxy_firewalld_zone: public
 
-# SELinux: lab default false (PEM may stay etc_t). When true, use cert_t for /etc/haproxy/certs on RHEL.
 haproxy_manage_selinux: false
 haproxy_selinux_cert_context: cert_t
 

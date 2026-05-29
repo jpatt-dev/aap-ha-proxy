@@ -1,6 +1,4 @@
 ---
-# Normalize Job Template survey / extra var inputs (strings, CSV lists, boolean strings).
-
 - name: Normalize boolean extra vars from surveys
   ansible.builtin.set_fact:
     configure_firewalld: "{{ configure_firewalld | bool }}"

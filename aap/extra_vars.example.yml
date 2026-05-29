@@ -1,6 +1,4 @@
 ---
-# Working AAP lab extra vars — Job Template extra variables or survey answers.
-
 keepalived_auth_pass: labpass1
 
 haproxy_manage_tls_files: false

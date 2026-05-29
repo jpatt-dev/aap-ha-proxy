@@ -1,6 +1,5 @@
 ---
-# AAP 2.6 custom execution environment definition.
-# Build from a pinned supported EE base; install collections from collections/requirements.yml.
+# AAP 2.6 custom EE — build from a pinned supported base image.
 
 version: 3
 

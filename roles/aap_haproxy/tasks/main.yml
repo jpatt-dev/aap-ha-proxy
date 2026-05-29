@@ -7,19 +7,8 @@
     that:
       - aap_gateway_backends | default([]) | length > 0
     fail_msg: |-
-      No AAP gateway backends were found.
-      For AAP Job Template usage, provide one of:
-
-      aap_gateway_backend_hosts_csv: "192.168.4.60"
-
-      or:
-
-      aap_gateway_backends:
-        - name: gw1
-          host: 192.168.4.60
-          port: 443
-
-      The AAP backend/controller host should not be included in the HAProxy inventory when this play targets all hosts.
+      No AAP gateway backends found. Set aap_gateway_backend_hosts_csv or aap_gateway_backends.
+      Do not include the AAP backend in the HAProxy inventory.
 
 - name: Reset normalized backends
   ansible.builtin.set_fact:
@@ -72,12 +61,7 @@
         )
     fail_msg: |-
       haproxy_verify_backend_cert is true but haproxy_backend_ca_src is missing.
-      Provide a CA certificate path on the execution node (project file), for example:
-
-      haproxy_backend_ca_src: /runner/project/files/aap-backend-ca.crt
-      haproxy_backend_ca_file: /etc/haproxy/certs/aap-backend-ca.pem
-
-      Or set haproxy_verify_backend_cert: false for lab.
+      Or set haproxy_verify_backend_cert: false.
 
 - name: Validate required variables
   ansible.builtin.assert:
@@ -112,11 +96,8 @@
       - aap_gateway_backends | map(attribute='host') | map('trim') | select('equalto', '') | list | length == 0
       - aap_gateway_backends | map(attribute='name') | list | length == (aap_gateway_backends | map(attribute='name') | unique | list | length)
     fail_msg: >-
-      Check AAP Job Template survey / aap/extra_vars.example.yml:
-      VIP, external access host (aap_gateway_external_host or aap_gateway_fqdn), backend host/name validity,
-      TLS (haproxy_ssl_cert_src and haproxy_ssl_key_src when haproxy_manage_tls_files is true,
-      or haproxy_ssl_pem_path when false), keepalived_auth_pass (max 8 chars),
-      and keepalived_peer_ips (>= 2 when configure_firewalld is true).
+      Check survey/extra vars: VIP, aap_gateway_external_host, backends, TLS paths,
+      keepalived_auth_pass (max 8 chars), keepalived_peer_ips (>= 2 if firewalld enabled).
 
 - name: Validate VIP interface exists
   ansible.builtin.assert:

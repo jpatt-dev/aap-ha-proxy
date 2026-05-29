@@ -4,18 +4,18 @@ argument_specs:
     short_description: Configure HAProxy and Keepalived in front of AAP 2.6 platform gateway
     description:
       - Deploys HAProxy and Keepalived on RHEL hosts in the selected AAP inventory.
-      - Variables can be set via AAP Job Template surveys, extra vars, inventory group_vars, or role defaults.
+      - Variables can be set via AAP survey, extra vars, host vars, or role defaults.
     author: aap-ha-proxy
     options:
       aap_haproxy_project_root:
         type: str
         default: "{{ playbook_dir | dirname }}"
-        description: Automation project root (parent of playbooks/). Override rarely.
+        description: Automation project root (parent of playbooks/).
 
       aap_gateway_fqdn:
         type: str
         default: aap.example.com
-        description: External AAP access name (alias). FQDN in production; VIP IP OK in lab.
+        description: External AAP access name. FQDN in production; VIP IP OK in lab.
 
       aap_gateway_external_host:
         type: str
@@ -30,22 +30,18 @@ argument_specs:
       aap_gateway_vip_interface:
         type: str
         default: ens192
-        description: NIC for VIP. Verify with ip route | grep default on each HAProxy node.
+        description: NIC for VIP.
 
       aap_gateway_backends:
         type: list
         elements: raw
         default: []
-        description: >-
-          Explicit gateway backends (highest priority). If empty, the role parses
-          aap_gateway_backend_hosts_csv from the AAP survey. Playbook targets hosts all.
+        description: Explicit gateway backends. If empty, parses aap_gateway_backend_hosts_csv.
 
       aap_gateway_backend_hosts_csv:
         type: str
         default: ""
-        description: >-
-          Comma-separated AAP gateway/backend IPs or hostnames (AAP survey). Parsed when
-          aap_gateway_backends is empty. Ignored when aap_gateway_backends is non-empty.
+        description: Comma-separated AAP gateway/backend IPs from survey or extra vars.
 
       haproxy_listen_port:
         type: int
@@ -70,24 +66,22 @@ argument_specs:
       haproxy_backend_verify_host:
         type: str
         default: ""
-        description: TLS verifyhost for backends; defaults to aap_gateway_fqdn when empty.
+        description: TLS verifyhost for backends; defaults to aap_gateway_external_host when empty.
 
       haproxy_manage_tls_files:
         type: bool
         default: false
-        description: >-
-          When true, deploy PEM from haproxy_ssl_cert_src and haproxy_ssl_key_src on the execution node.
-          When false, use existing haproxy_ssl_pem_path on each HAProxy node.
+        description: Deploy PEM from project files when true; use existing haproxy_ssl_pem_path when false.
 
       haproxy_ssl_pem_path:
         type: path
         default: /etc/haproxy/certs/aap-gateway.pem
-        description: Combined PEM path on HAProxy nodes (deployed or pre-existing).
+        description: Combined PEM path on HAProxy nodes.
 
       haproxy_ssl_cert_src:
         type: path
         default: ""
-        description: Full-chain certificate path on execution node when haproxy_manage_tls_files is true.
+        description: Certificate path on execution node when haproxy_manage_tls_files is true.
 
       haproxy_ssl_key_src:
         type: path
@@ -113,12 +107,12 @@ argument_specs:
         type: str
         required: true
         no_log: true
-        description: VRRP password (max 8 characters). Use AAP survey password or vault.
+        description: VRRP password (max 8 characters).
 
       keepalived_vrrp_id:
         type: int
         default: 51
-        description: VRRP virtual router ID (unique per cluster).
+        description: VRRP virtual router ID.
 
       keepalived_state:
         type: str
@@ -126,18 +120,18 @@ argument_specs:
         choices:
           - MASTER
           - BACKUP
-        description: Keepalived initial state. Prefer BACKUP on both nodes with different priority.
+        description: Set per host in AAP inventory — MASTER on primary (priority 101), BACKUP on secondary (100).
 
       keepalived_priority:
         type: int
         default: 100
-        description: VRRP priority (set per host in inventory host_vars).
+        description: VRRP priority. Set per host in AAP inventory host vars.
 
       keepalived_peer_ips:
         type: list
         elements: str
         default: []
-        description: HAProxy peer IPs allowed to send VRRP when firewalld is enabled.
+        description: HAProxy peer IPs for VRRP firewall rules.
 
       keepalived_peer_ips_csv:
         type: str
@@ -147,23 +141,23 @@ argument_specs:
       keepalived_unicast:
         type: bool
         default: true
-        description: Enable unicast VRRP (recommended on VMware when multicast is unreliable).
+        description: Enable unicast VRRP.
 
       keepalived_unicast_src_ip:
         type: str
         default: ""
-        description: This node's IP for unicast VRRP. Set in inventory host_vars only, not Job Template survey.
+        description: This node's IP for unicast VRRP. Set in AAP host vars only.
 
       keepalived_unicast_peers:
         type: list
         elements: str
         default: []
-        description: Peer node IPs for unicast VRRP. Set in inventory host_vars only, not Job Template survey.
+        description: Peer node IPs for unicast VRRP. Set in AAP host vars only.
 
       keepalived_unicast_peers_csv:
         type: str
         default: ""
-        description: Optional CSV override for host_vars; not used in Job Template survey.
+        description: Optional CSV override; not used in Job Template survey.
 
       keepalived_nopreempt:
         type: bool
@@ -188,13 +182,9 @@ argument_specs:
       haproxy_manage_selinux:
         type: bool
         default: false
-        description: >-
-          Set SELinux fcontext on haproxy_ssl_cert_dest_dir and restorecon. Requires
-          community.general when true and SELinux is enforcing. Lab default is false.
+        description: Set SELinux fcontext on certificate directory when true.
 
       haproxy_selinux_cert_context:
         type: str
         default: cert_t
-        description: >-
-          SELinux file type for certificate paths (RHEL: use cert_t, not haproxy_etc_t).
-          Verify with semanage fcontext -l on target hosts.
+        description: SELinux file type for certificate paths (RHEL use cert_t).
